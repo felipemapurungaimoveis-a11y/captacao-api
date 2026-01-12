@@ -1,45 +1,78 @@
 from flask import Flask, request, jsonify
-import os
 from datetime import datetime
+import os
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
 
 app = Flask(__name__)
 
-# Rota principal (teste)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PDF_DIR = os.path.join(BASE_DIR, "pdfs")
+
+if not os.path.exists(PDF_DIR):
+    os.makedirs(PDF_DIR)
+
+
 @app.route("/")
 def home():
     return "API de Captação Online"
 
-# Health check (Render)
+
 @app.route("/healthz")
 def healthz():
     return "ok"
 
-# Rota que recebe os dados do Google Forms
+
 @app.route("/captacao", methods=["POST"])
 def captacao():
-    # Força leitura do JSON (Google Apps Script)
     dados = request.get_json(force=True, silent=True)
 
     print("===================================")
-    print("DADOS RECEBIDOS EM:", datetime.now())
-    print(dados)
-    print("RAW DATA:", request.data)
+    print("DADOS RECEBIDOS:", dados)
     print("===================================")
 
     if not dados:
-        return jsonify({
-            "status": "erro",
-            "mensagem": "JSON vazio ou inválido"
-        }), 400
+        return jsonify({"status": "erro", "mensagem": "JSON vazio"}), 400
+
+    # Nome do arquivo
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    nome_arquivo = f"captacao_{timestamp}.pdf"
+    caminho_pdf = os.path.join(PDF_DIR, nome_arquivo)
+
+    gerar_pdf(caminho_pdf, dados)
 
     return jsonify({
         "status": "sucesso",
-        "mensagem": "Captação recebida com sucesso",
-        "dados": dados
+        "arquivo": nome_arquivo
     }), 200
 
 
+def gerar_pdf(caminho, dados):
+    c = canvas.Canvas(caminho, pagesize=A4)
+    largura, altura = A4
+
+    y = altura - 50
+
+    # Título
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(50, y, "FICHA DE CAPTAÇÃO DE IMÓVEL")
+    y -= 40
+
+    c.setFont("Helvetica", 11)
+
+    for campo, valor in dados.items():
+        texto = f"{campo}: {valor}"
+        c.drawString(50, y, texto)
+        y -= 20
+
+        if y < 50:
+            c.showPage()
+            c.setFont("Helvetica", 11)
+            y = altura - 50
+
+    c.save()
+
+
 if __name__ == "__main__":
-    # Porta obrigatória do Render
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)

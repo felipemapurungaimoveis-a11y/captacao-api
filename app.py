@@ -24,7 +24,7 @@ def captacao():
     gerar_pdf(buffer, dados)
     buffer.seek(0)
 
-    nome_arquivo = f"captacao_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+    nome_arquivo = f"CAPTACAO_{datetime.now().strftime('%d-%m-%Y_%H-%M')}.pdf"
 
     return send_file(
         buffer,
@@ -32,6 +32,8 @@ def captacao():
         download_name=nome_arquivo,
         mimetype="application/pdf"
     )
+
+# ================= PDF ================= #
 
 def gerar_pdf(buffer, dados):
     c = canvas.Canvas(buffer, pagesize=A4)
@@ -47,32 +49,41 @@ def gerar_pdf(buffer, dados):
     margem_x = 40
     largura_util = largura - (margem_x * 2)
 
-    def cabecalho():
-        nonlocal y
-        y = altura - 50
-
-        if os.path.exists(logo_path):
-            c.drawImage(logo_path, margem_x, y - 40, width=120, height=40, mask="auto")
-
-        c.setFont("Helvetica-Bold", 18)
-        c.setFillColor(azul)
-        c.drawCentredString(largura / 2, y, "FICHA DE CAPTAÇÃO DE IMÓVEL")
-
-        c.setLineWidth(1)
-        c.line(margem_x, y - 15, largura - margem_x, y - 15)
-
-        c.setFont("Helvetica", 9)
-        c.setFillColor(cinza)
-        c.drawRightString(
-            largura - margem_x,
-            y - 30,
-            datetime.now().strftime("%d/%m/%Y %H:%M")
+    # ===== LOGO =====
+    if os.path.exists(logo_path):
+        c.drawImage(
+            logo_path,
+            margem_x,
+            altura - 80,
+            width=150,
+            height=55,
+            preserveAspectRatio=True,
+            mask="auto"
         )
 
-        y -= 80
+    # ===== TÍTULO =====
+    c.setFont("Helvetica-Bold", 18)
+    c.setFillColor(azul)
+    c.drawCentredString(
+        largura / 2 + 40,
+        altura - 60,
+        "FICHA DE CAPTAÇÃO DE IMÓVEL"
+    )
 
-    cabecalho()
+    c.setLineWidth(1)
+    c.line(margem_x, altura - 90, largura - margem_x, altura - 90)
 
+    c.setFont("Helvetica", 9)
+    c.setFillColor(cinza)
+    c.drawRightString(
+        largura - margem_x,
+        altura - 105,
+        datetime.now().strftime("%d/%m/%Y %H:%M")
+    )
+
+    y = altura - 130
+
+    # ===== SEÇÕES =====
     secoes = {
         "DADOS DO PROPRIETÁRIO": [
             "Nome do Proprietário",
@@ -132,23 +143,32 @@ def gerar_pdf(buffer, dados):
     }
 
     def nova_pagina():
+        nonlocal y
         c.showPage()
-        cabecalho()
+        y = altura - 130
 
-    for titulo, campos in secoes.items():
-        altura_secao = 18 + (len(campos) * 26)
+    def desenhar_secao(titulo, campos):
+        nonlocal y
 
-        if y - altura_secao < 80:
+        altura_real = 30
+
+        for campo in campos:
+            valor = str(dados.get(campo, "—"))
+            linhas = simpleSplit(valor, "Helvetica", 10, largura_util - 160)
+            altura_real += 18 + (len(linhas) * 12)
+
+        if y - altura_real < 70:
             nova_pagina()
 
         c.setStrokeColor(azul)
-        c.rect(margem_x, y - altura_secao, largura_util, altura_secao)
+        c.setLineWidth(1)
+        c.rect(margem_x, y - altura_real, largura_util, altura_real)
 
         c.setFont("Helvetica-Bold", 12)
         c.setFillColor(azul)
-        c.drawString(margem_x + 10, y - 15, titulo)
+        c.drawString(margem_x + 10, y - 20, titulo)
 
-        y_cursor = y - 35
+        y_cursor = y - 38
 
         for campo in campos:
             valor = str(dados.get(campo, "—"))
@@ -157,16 +177,18 @@ def gerar_pdf(buffer, dados):
             c.setFillColor(preto)
             c.drawString(margem_x + 10, y_cursor, campo)
 
-            linhas = simpleSplit(valor, "Helvetica", 10, largura_util - 170)
-
+            linhas = simpleSplit(valor, "Helvetica", 10, largura_util - 160)
             c.setFont("Helvetica", 10)
-            x_valor = margem_x + 160
+
             for linha in linhas:
-                c.drawString(x_valor, y_cursor, linha)
+                c.drawString(margem_x + 150, y_cursor, linha)
                 y_cursor -= 12
 
-            y_cursor -= 6
+            y_cursor -= 8
 
-        y -= altura_secao + 15
+        y -= altura_real + 18
+
+    for titulo, campos in secoes.items():
+        desenhar_secao(titulo, campos)
 
     c.save()

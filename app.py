@@ -33,7 +33,7 @@ def captacao():
         mimetype="application/pdf"
     )
 
-# ================= PDF ================= #
+# ======================================================
 
 def gerar_pdf(buffer, dados):
     c = canvas.Canvas(buffer, pagesize=A4)
@@ -49,7 +49,7 @@ def gerar_pdf(buffer, dados):
     margem_x = 40
     largura_util = largura - (margem_x * 2)
 
-    # ===== LOGO =====
+    # ===== CABEÇALHO =====
     if os.path.exists(logo_path):
         c.drawImage(
             logo_path,
@@ -61,14 +61,9 @@ def gerar_pdf(buffer, dados):
             mask="auto"
         )
 
-    # ===== TÍTULO =====
     c.setFont("Helvetica-Bold", 18)
     c.setFillColor(azul)
-    c.drawCentredString(
-        largura / 2 + 40,
-        altura - 60,
-        "FICHA DE CAPTAÇÃO DE IMÓVEL"
-    )
+    c.drawCentredString(largura / 2 + 40, altura - 60, "FICHA DE CAPTAÇÃO DE IMÓVEL")
 
     c.setLineWidth(1)
     c.line(margem_x, altura - 90, largura - margem_x, altura - 90)
@@ -85,60 +80,133 @@ def gerar_pdf(buffer, dados):
 
     # ===== SEÇÕES =====
     secoes = {
+        "CORRETOR": [
+            "CORRETOR CAPTADOR",
+],
+        "CÓDIGO DO IMÓVEL": [
+            "CÓD DO IMÓVEL",
+],
+
         "DADOS DO PROPRIETÁRIO": [
-            "Nome do Proprietário",
+            "NOME DO PROPRIETÁRIO/EMPRESA",
             "CPF/CNPJ",
-            "Data de Nascimento",
-            "Nome do Cônjuge",
-            "E-mail do Proprietário",
-            "Telefone do Proprietário",
+            "DATA DE NASCIMENTO",
+            "NOME DO CÔNJUGE",
+            "E-MAIL",
+            "TELEFONE",
         ],
+
         "DADOS DO IMÓVEL DO PROPRIETÁRIO": [
-            "Endereço do Proprietário",
-            "Nº da casa do Proprietário",
-            "Bairro da casa do Proprietário",
-            "Cidade da casa do proprietário",
-            "Estado da casa do proprietário",
-            "CEP da cada do Proprietário",
-            "Complemento",
+            "ENDEREÇO DA CASA DO PROPRIETÁRIO",
+            "NÚMERO DA CASA DO PROPRIETÁRIO",
+            "BAIRRO DA CASA DO PROPRIETÁRIO",
+            "CIDADE DA CASA DO PROPRIETÁRIO",
+            "ESTADO DA CASA DO PROPRIETÁRIO",
+            "CEP DA CASA DO PROPRIETÁRIO",
+            "COMPLEMENTO",
         ],
+
         "DADOS DO IMÓVEL CAPTADO": [
-            "Endereço do Imóvel (CAPTADO)",
-            "Nº do Imóvel (CAPTADO)",
-            "Bairro do Imóvel (CAPTADO)",
-            "Cidade do Imóvel (CAPTADO)",
-            "CEP do Imóvel (CAPTADO)",
-            "Estado do Imóvel (CAPTADO)",
-            "Complemento do Imóvel (CAPTADO)",
+            "ENDEREÇO DO IMÓVEL (CAPTADO)",
+            "NÚMERO DO IMÓVEL (CAPTADO)",
+            "BAIRRO DO IMÓVEL (CAPTADO)",
+            "CIDADE DO IMÓVEL (CAPTADO)",
+            "CEP DO IMÓVEL (CAPTADO)",
+            "ESTADO DO IMÓVEL (CAPTADO)",
+            "COMPLEMENTO DO IMÓVEL (CAPTADO)",
         ],
+
         "CARACTERÍSTICAS GERAIS": [
-            "Situação do Imóvel",
-            "Tipo do Imóvel",
-            "Nome da Construtora",
-            "Idade do Imóvel",
-            "Posição do Imóvel",
-            "Topografia",
-            "Prazo de Entrega",
+            "SITUAÇAÕ DO IMÓVEL",
+            "TIPO DO IMÓVEL",
+            "NOME DA CONSTRUTORA",
+            "IDADE DO IMÓVEL",
+            "POSIÇÃO DO IMÓVEL",
+            "TOPOGRAFIA",
+            "PRAZO DE ENTREGA",
         ],
+
         "VALORES": [
-            "Preço do Imóvel (CAPTADO)",
-            "Preço do Condomínio",
-            "Preço do IPTU",
-            "Aceita Permuta?",
+            "PREÇO DO IMÓVEL (CAPTADO)",
+            "PREÇO DO CONDOMÍNIO ",
+            "PREÇO DO IPTU",
+            "ACEITA PERMUTA?",
         ],
+
         "DISTRIBUIÇÃO DO IMÓVEL": [
-            "Quantidade de Quarto?",
-            "Quantidade de Suíte?",
-            "Quantidade de Sala?",
-            "Quantidade de Banheiro?",
-            "Tem Varanda?",
-            "Tem Garagem?",
-            "Cabe quantos carros?",
-            "A garagem é coberta?",
+            "QUANTIDADE DE QUARTO?",
+            "QUANTIDADE DE SUÍTE?",
+            "QUANTIDADE DE SALA?",
+            "QUANTIDADE DE BANHEIRO?",
+            "TEM VARANDA?",
+            "TEM GARAGEM?",
+            "CABE QUANTOS CARROS?",
+            "A GARAGEM É COBERTA ?",
         ],
+
+        "PRÉDIO / FACHADA": [
+            "TIPO DE FACHADA?",
+            "PAVIMENTOS",
+            "TOTAL DE UNIDADES",
+            "UNIDADES POR ANDAR",
+
+        ],
+
+        "SITUAÇÃO DO IMÓVEL": [
+            "O IMÓVEL ESTÁ?",
+            "SE OCUPADO, QUEM RESIDE?",
+        ],
+
+        "INFORMAÇÃO DA ÁREA DO IMÓVEL": [
+            "ÁREA ÚTIL TOTAL DO IMÓVEL",
+            "ÁREA LOTE / TERRENO",
+            "ÁREA CONSTRUÍDA",
+            "ÁREA DE FRENTE",
+            "ÁREA DE FUNDO",
+            "ÁREA LATERAL  - ESQUERDA",
+            "ÁREA LATERAL - DIREITA",
+        ],
+
         "DESCRIÇÃO COMPLEMENTAR": [
-            "Faça uma descrição detalhada do Imóvel",
-            "Vistoria",
+            "FAÇA UMA DESCRIÇÃO DETALHADA DO IMÓVEL",
+            "VISTORIA",
+        ],
+
+        "CONDIÇÕES DE PAGAMENTO": [
+            "O IMÓVEL TERÁ UMA ENTRADA?",
+            "QUAL SERÁ O VALOR DA ENTRADA?",
+            "QUAL A CONDIÇÃO DE PAGAMENTO?",
+        ],
+
+        "CARTÃO DE CRÉDITO": [
+            "QUANTIDADE DE PARCELAS",
+            "QUAL A DATA DO VENCIMENTO DA PARCELA",
+            "QUAL O VALOR A SER PAGO POR PARCELA",
+        ],
+
+        "DOCUMENTAÇÃO DO IMÓVEL": [
+            "IMÓVEL QUITADO",
+            "O IMÓVEL POSSUI TODA DOCUMENTAÇÃO?",
+            "QUAIS AS DOCUMENTAÇÕES QUE O IMÓVEL POSSUI?",
+            "LOCAL DAS CHAVES",
+        ],
+
+        "CONDIÇÕES COMERCIAIS": [
+            "POSSUI EXCLUSIVIDADE",
+            "PRAZO DE EXCLUSIVDADE",
+            "OPORTUNIDADE",
+            "COMISSÃO DA IMOBILIÁRIA / CORRETOR? (%)",
+        ],
+
+        "ANEXOS": [
+            "COLOQUE AS FOTOS DO IMÓVEL - PART 1",
+            "COLOQUE AS FOTOS DO IMÓVEL - PART 2",
+            "COLOQUE OS DOCUMENTOS DO IMÓVEL",
+        ],
+
+        "AUTORIZAÇÃO": [
+            " Declaro que as informações prestadas são verdadeiras e autorizo a divulgação do"
+            "imóvel para fins de venda/locação.",
         ],
     }
 

@@ -2,12 +2,17 @@ from flask import Flask, request, send_file
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.colors import HexColor
-from reportlab.lib.utils import simpleSplit
+from reportlab.lib.utils import simpleSplit, ImageReader
 from datetime import datetime
 import io
 import os
+import qrcode
 
 app = Flask(__name__)
+
+# =========================================================
+# ROTAS
+# =========================================================
 
 @app.route("/")
 def home():
@@ -25,7 +30,13 @@ def captacao():
     gerar_pdf(buffer, dados)
     buffer.seek(0)
 
-    nome_arquivo = f"captacao_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+    nome = dados.get("NOME DO PROPRIETÁRIO/EMPRESA", "SEM_PROPRIETARIO")
+    corretor = dados.get("CORRETOR CAPTADOR", "SEM_CORRETOR")
+
+    nome_arquivo = (
+        f"CAPTACAO - {nome} - {corretor} - "
+        f"{datetime.now().strftime('%d-%m-%Y')}.pdf"
+    )
 
     return send_file(
         buffer,
@@ -35,7 +46,9 @@ def captacao():
     )
 
 
-# ===================== PDF =====================
+# =========================================================
+# PDF
+# =========================================================
 
 def gerar_pdf(buffer, dados):
     c = canvas.Canvas(buffer, pagesize=A4)
@@ -45,28 +58,31 @@ def gerar_pdf(buffer, dados):
     logo_path = os.path.join(BASE_DIR, "logo.png")
 
     azul = HexColor("#0A3D62")
-    cinza = HexColor("#444444")
     preto = HexColor("#000000")
+    cinza = HexColor("#666666")
+    verde = HexColor("#2E7D32")
+    vermelho = HexColor("#C62828")
 
     margem_x = 40
     largura_util = largura - (margem_x * 2)
+    y = altura - 130
 
-    # ---------- CABEÇALHO ----------
-    def desenhar_cabecalho():
+    # =====================================================
+    # CABEÇALHO / RODAPÉ
+    # =====================================================
+
+    def cabecalho():
         if os.path.exists(logo_path):
             c.drawImage(
-                logo_path,
-                margem_x,
-                altura - 80,
-                width=150,
-                height=55,
-                preserveAspectRatio=True,
-                mask="auto"
+                logo_path, margem_x, altura - 80,
+                width=150, height=55,
+                preserveAspectRatio=True, mask="auto"
             )
 
         c.setFont("Helvetica-Bold", 18)
         c.setFillColor(azul)
-        c.drawCentredString(largura / 2 + 40, altura - 60, "FICHA DE CAPTAÇÃO DE IMÓVEL")
+        c.drawCentredString(largura / 2 + 40, altura - 60,
+                            "FICHA DE CAPTAÇÃO DE IMÓVEL")
 
         c.setLineWidth(1)
         c.line(margem_x, altura - 90, largura - margem_x, altura - 90)
@@ -74,47 +90,107 @@ def gerar_pdf(buffer, dados):
         c.setFont("Helvetica", 9)
         c.setFillColor(cinza)
         c.drawRightString(
-            largura - margem_x,
-            altura - 105,
+            largura - margem_x, altura - 105,
             datetime.now().strftime("%d/%m/%Y %H:%M")
         )
 
-    # ---------- RODAPÉ ----------
-    def desenhar_rodape():
+    def rodape():
         c.setFont("Helvetica", 8)
-        c.setFillColor(HexColor("#777777"))
+        c.setFillColor(cinza)
         c.drawRightString(largura - 40, 30, f"Página {c.getPageNumber()}")
 
-    desenhar_cabecalho()
-    y = altura - 130
-
-    # ---------- NOVA PÁGINA ----------
     def nova_pagina():
         nonlocal y
-        desenhar_rodape()
+        rodape()
         c.showPage()
-        desenhar_cabecalho()
+        cabecalho()
         y = altura - 130
 
-    # ---------- TEXTO LONGO ----------
-    def desenhar_texto_longo(c, texto, x, y, largura_max, altura_pagina, margem_inferior):
-        linhas = simpleSplit(texto, "Helvetica", 10, largura_max)
-        for linha in linhas:
-            if y < margem_inferior:
-                nova_pagina()
-                y = altura - 150
-            c.drawString(x, y, linha)
-            y -= 12
-        return y - 6
+    # =====================================================
+    # CAPA
+    # =====================================================
 
-# ===== SEÇÕES =====
+    def capa():
+        if os.path.exists(logo_path):
+            c.drawImage(
+                logo_path,
+                largura / 2 - 120,
+                altura - 200,
+                width=240,
+                height=90,
+                preserveAspectRatio=True,
+                mask="auto"
+            )
+
+        c.setFont("Helvetica-Bold", 22)
+        c.setFillColor(azul)
+        c.drawCentredString(largura / 2, altura - 300,
+                            "FICHA DE CAPTAÇÃO DE IMÓVEL")
+
+        c.setFont("Helvetica", 14)
+        c.setFillColor(preto)
+
+        c.drawCentredString(
+            largura / 2, altura - 360,
+            f"Proprietário: {dados.get('NOME DO PROPRIETÁRIO/EMPRESA', '—')}"
+        )
+
+        c.drawCentredString(
+            largura / 2, altura - 390,
+            f"Corretor: {dados.get('CORRETOR CAPTADOR', '—')}"
+        )
+
+        c.drawCentredString(
+            largura / 2, altura - 420,
+            f"Código do Imóvel: {dados.get('CÓD DO IMÓVEL', '—')}"
+        )
+
+        c.setFont("Helvetica", 10)
+        c.setFillColor(cinza)
+        c.drawCentredString(
+            largura / 2, 100,
+            f"Gerado em {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+        )
+
+        c.showPage()
+
+    # =====================================================
+    # FORMATADORES
+    # =====================================================
+
+    def moeda(valor):
+        try:
+            valor = str(valor).replace(".", "").replace(",", ".")
+            n = float(valor)
+            return f"R$ {n:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        except:
+            return valor
+
+    def sim_nao(valor, x, y):
+        v = valor.upper()
+        if v == "SIM":
+            c.setFillColor(verde)
+            c.drawString(x, y, "✔ SIM")
+        elif v in ["NÃO", "NAO"]:
+            c.setFillColor(vermelho)
+            c.drawString(x, y, "✖ NÃO")
+        else:
+            c.setFillColor(preto)
+            c.drawString(x, y, valor)
+        c.setFillColor(preto)
+        return y - 14
+
+    # =====================================================
+    # SEÇÕES (2 COLUNAS)
+    # =====================================================
+
     secoes = {
         "CORRETOR": [
             "CORRETOR CAPTADOR",
-],
+        ],
         "CÓDIGO DO IMÓVEL": [
             "CÓD DO IMÓVEL",
-],
+        ],
 
         "DADOS DO PROPRIETÁRIO": [
             "NOME DO PROPRIETÁRIO/EMPRESA",
@@ -237,92 +313,131 @@ def gerar_pdf(buffer, dados):
             " Declaro que as informações prestadas são verdadeiras e autorizo a divulgação do"
             "imóvel para fins de venda/locação.",
         ],
-}
-    LARGURA_TEXTO = largura_util - 190
+    }
 
-    def desenhar_secao(titulo, campos):
+    col_x = [margem_x, margem_x + largura_util / 2]
+    largura_col = (largura_util / 2) - 20
+
+    def secao(titulo, campos):
         nonlocal y
 
-        coluna_x = [margem_x + 10, margem_x + largura_util / 2 + 10]
-        largura_coluna = (largura_util / 2) - 30
-
-        c.setFont("Helvetica-Bold", 12)
+        c.setFont("Helvetica-Bold", 13)
         c.setFillColor(azul)
 
-        if y < 120:
+        if y < 140:
             nova_pagina()
 
-        c.drawString(margem_x + 10, y, titulo)
+        c.drawString(margem_x, y, titulo)
         y -= 20
 
         col = 0
-        y_inicial = y
+        y_base = y
 
         for campo in campos:
             valor = str(dados.get(campo, "—"))
 
-            # Detecta valores monetários
-            if "PREÇO" in campo or "VALOR" in campo or "R$" in valor:
-                valor = formatar_moeda(valor)
+            if "PREÇO" in campo or "VALOR" in campo:
+                valor = moeda(valor)
 
             c.setFont("Helvetica-Bold", 9)
-            c.setFillColor(preto)
-            c.drawString(coluna_x[col], y, campo)
-
+            c.drawString(col_x[col], y, campo)
             y -= 12
+
             c.setFont("Helvetica", 10)
 
-            # SIM / NÃO
             if valor.upper() in ["SIM", "NÃO", "NAO"]:
-                y = desenhar_sim_nao(c, valor, coluna_x[col], y)
+                y = sim_nao(valor, col_x[col], y)
             else:
-                linhas = simpleSplit(valor, "Helvetica", 10, largura_coluna)
-                for linha in linhas:
-                    c.drawString(coluna_x[col], y, linha)
+                linhas = simpleSplit(valor, "Helvetica", 10, largura_col)
+                for l in linhas:
+                    c.drawString(col_x[col], y, l)
                     y -= 12
 
-            # Alterna coluna
             if col == 0:
                 col = 1
-                y = y_inicial
+                y = y_base
             else:
                 col = 0
-                y = min(y, y_inicial) - 18
-                y_inicial = y
+                y_base = min(y, y_base) - 18
+                y = y_base
 
             if y < 80:
                 nova_pagina()
-                y -= 20
 
-    def formatar_moeda(valor):
-        try:
-            valor = str(valor).replace(".", "").replace(",", ".")
-            numero = float(valor)
-            return f"R$ {numero:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-        except:
-            return valor
+    # =====================================================
+    # FOTOS
+    # =====================================================
 
-    def desenhar_sim_nao(c, texto, x, y):
-        texto = texto.strip().upper()
+    def fotos():
+        fotos = dados.get("COLOQUE AS FOTOS DO IMÓVEL - PART 1", [])
+        if not isinstance(fotos, list):
+            return
 
-        if texto == "SIM":
-            c.setFillColor(HexColor("#2E7D32"))
-            c.drawString(x, y, "✔ SIM")
-            c.setFillColor(HexColor("#000000"))
-            return y - 14
+        margem = 40
+        img_w = (largura - margem * 3) / 2
+        img_h = 180
 
-        if texto == "NÃO" or texto == "NAO":
-            c.setFillColor(HexColor("#C62828"))
-            c.drawString(x, y, "✖ NÃO")
-            c.setFillColor(HexColor("#000000"))
-            return y - 14
+        x_pos = [margem, margem * 2 + img_w]
+        y_img = altura - 100
+        col = 0
 
-        c.drawString(x, y, texto)
-        return y - 14
+        for url in fotos:
+            try:
+                img = ImageReader(url)
+                c.drawImage(img, x_pos[col], y_img - img_h,
+                            width=img_w, height=img_h,
+                            preserveAspectRatio=True, mask="auto")
 
-    # ---------- DESENHAR PDF ----------
+                col += 1
+                if col > 1:
+                    col = 0
+                    y_img -= img_h + 20
+
+                if y_img < 200:
+                    c.showPage()
+                    y_img = altura - 100
+            except:
+                pass
+
+        c.showPage()
+
+    # =====================================================
+    # QR CODE
+    # =====================================================
+
+    def qrcode_imovel():
+        valor = dados.get("LINK DO IMÓVEL") or dados.get("CÓD DO IMÓVEL")
+        if not valor:
+            return
+
+        qr = qrcode.make(valor)
+        buf = io.BytesIO()
+        qr.save(buf, format="PNG")
+        buf.seek(0)
+
+        c.drawImage(
+            ImageReader(buf),
+            largura / 2 - 60,
+            80,
+            width=120,
+            height=120
+        )
+
+        c.setFont("Helvetica", 9)
+        c.drawCentredString(largura / 2, 60,
+                            "Escaneie para acessar o imóvel")
+
+    # =====================================================
+    # EXECUÇÃO
+    # =====================================================
+
+    capa()
+    cabecalho()
+
     for titulo, campos in secoes.items():
-        desenhar_secao(titulo, campos)
+        secao(titulo, campos)
 
-    desenhar_rodape()
+    fotos()
+    qrcode_imovel()
+    rodape()
     c.save()

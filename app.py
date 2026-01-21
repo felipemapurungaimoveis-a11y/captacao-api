@@ -2,188 +2,142 @@ from flask import Flask, request, send_file
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.colors import HexColor
-from reportlab.lib.utils import simpleSplit, ImageReader
+from reportlab.lib.utils import simpleSplit
 from datetime import datetime
 import io
 import os
 import qrcode
 
+# ===== GOOGLE DRIVE =====
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
+
+# ===== CONFIG =====
+PASTA_DRIVE_ID = "1Acbxy3rMIUTo1wklCLJMRTfiYWJPqFXf"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+LOGO_PATH = os.path.join(BASE_DIR, "logo.png")
+CREDENCIAL = os.path.join(BASE_DIR, "credentials.json")
+
+SCOPES = ["https://www.googleapis.com/auth/drive"]
+
 app = Flask(__name__)
 
-# =========================================================
-# ROTAS
-# =========================================================
+# ===== CORES POR SEÇÃO =====
+CORES_SECAO = {
+    "CORRETOR": HexColor("#0A3D62"),
+    "CÓDIGO DO IMÓVEL": HexColor("#1B5E20"),
+    "DADOS DO PROPRIETÁRIO": HexColor("#283593"),
+    "DADOS DO IMÓVEL DO PROPRIETÁRIO": HexColor("#4E342E"),
+    "DADOS DO IMÓVEL CAPTADO": HexColor("#1565C0"),
+    "CARACTERÍSTICAS GERAIS": HexColor("#455A64"),
+    "VALORES": HexColor("#B71C1C"),
+    "DESCRIÇÃO COMPLEMENTAR": HexColor("#37474F"),
+    "AUTORIZAÇÃO": HexColor("#263238"),
+}
 
-@app.route("/")
-def home():
-    return "API de Captação Online OK"
-
-
-@app.route("/captacao", methods=["POST"])
-def captacao():
-    dados = request.get_json()
-
-    if not dados:
-        return {"erro": "Nenhum dado recebido"}, 400
-
-    buffer = io.BytesIO()
-    gerar_pdf(buffer, dados)
-    buffer.seek(0)
-
-    nome = dados.get("NOME DO PROPRIETÁRIO/EMPRESA", "SEM_PROPRIETARIO")
-    corretor = dados.get("CORRETOR CAPTADOR", "SEM_CORRETOR")
-
-    nome_arquivo = (
-        f"CAPTACAO - {nome} - {corretor} - "
-        f"{datetime.now().strftime('%d-%m-%Y')}.pdf"
+# ===== DRIVE SERVICE =====
+def drive_service():
+    creds = service_account.Credentials.from_service_account_file(
+        CREDENCIAL, scopes=SCOPES
     )
+    return build("drive", "v3", credentials=creds)
 
-    return send_file(
-        buffer,
-        as_attachment=True,
-        download_name=nome_arquivo,
-        mimetype="application/pdf"
-    )
+# ===== SALVAR PDF NO DRIVE =====
+def salvar_no_drive(caminho, nome):
+    service = drive_service()
 
+    media = MediaFileUpload(caminho, mimetype="application/pdf")
+    file_metadata = {
+        "name": nome,
+        "parents": [PASTA_DRIVE_ID]
+    }
 
-# =========================================================
-# PDF
-# =========================================================
+    file = service.files().create(
+        body=file_metadata,
+        media_body=media,
+        fields="id"
+    ).execute()
 
-def gerar_pdf(buffer, dados):
+    file_id = file.get("id")
+
+    # Tornar público
+    service.permissions().create(
+        fileId=file_id,
+        body={"type": "anyone", "role": "reader"}
+    ).execute()
+
+    return f"https://drive.google.com/file/d/{file_id}/view"
+
+# ===== GERAR PDF =====
+def gerar_pdf(buffer, dados, qr_url):
     c = canvas.Canvas(buffer, pagesize=A4)
     largura, altura = A4
 
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    logo_path = os.path.join(BASE_DIR, "logo.png")
-
-    azul = HexColor("#0A3D62")
-    preto = HexColor("#000000")
-    cinza = HexColor("#666666")
-    verde = HexColor("#2E7D32")
-    vermelho = HexColor("#C62828")
-
     margem_x = 40
     largura_util = largura - (margem_x * 2)
-    y = altura - 130
+    y = altura - 120
 
-    # =====================================================
-    # CABEÇALHO / RODAPÉ
-    # =====================================================
+    # ===== CABEÇALHO =====
+    if os.path.exists(LOGO_PATH):
+        c.drawImage(LOGO_PATH, margem_x, altura - 80, width=140, height=50, preserveAspectRatio=True)
 
-    def cabecalho():
-        if os.path.exists(logo_path):
-            c.drawImage(
-                logo_path, margem_x, altura - 80,
-                width=150, height=55,
-                preserveAspectRatio=True, mask="auto"
-            )
+    c.setFont("Helvetica-Bold", 18)
+    c.drawCentredString(largura / 2 + 40, altura - 55, "FICHA DE CAPTAÇÃO DE IMÓVEL")
 
-        c.setFont("Helvetica-Bold", 18)
-        c.setFillColor(azul)
-        c.drawCentredString(largura / 2 + 40, altura - 60,
-                            "FICHA DE CAPTAÇÃO DE IMÓVEL")
+    c.setLineWidth(1)
+    c.line(margem_x, altura - 90, largura - margem_x, altura - 90)
 
-        c.setLineWidth(1)
-        c.line(margem_x, altura - 90, largura - margem_x, altura - 90)
+    c.setFont("Helvetica", 9)
+    c.drawRightString(largura - margem_x, altura - 105,
+                      datetime.now().strftime("%d/%m/%Y %H:%M"))
 
-        c.setFont("Helvetica", 9)
-        c.setFillColor(cinza)
-        c.drawRightString(
-            largura - margem_x, altura - 105,
-            datetime.now().strftime("%d/%m/%Y %H:%M")
-        )
+    # ===== QR CODE =====
+    qr_img = qrcode.make(qr_url)
+    qr_path = os.path.join(BASE_DIR, "qr_temp.png")
+    qr_img.save(qr_path)
 
-    def rodape():
-        c.setFont("Helvetica", 8)
-        c.setFillColor(cinza)
-        c.drawRightString(largura - 40, 30, f"Página {c.getPageNumber()}")
+    c.drawImage(qr_path, largura - 140, 60, width=90, height=90)
+    c.setFont("Helvetica", 8)
+    c.drawCentredString(largura - 95, 50, "Acesse este imóvel")
 
+    # ===== FUNÇÕES =====
     def nova_pagina():
         nonlocal y
-        rodape()
         c.showPage()
-        cabecalho()
-        y = altura - 130
+        y = altura - 120
 
-    # =====================================================
-    # CAPA
-    # =====================================================
+    def desenhar_texto(c, texto, x, y, largura_max):
+        linhas = simpleSplit(texto, "Helvetica", 10, largura_max)
+        for linha in linhas:
+            if y < 60:
+                nova_pagina()
+            c.drawString(x, y, linha)
+            y -= 12
+        return y - 4
 
-    def capa():
-        if os.path.exists(logo_path):
-            c.drawImage(
-                logo_path,
-                largura / 2 - 120,
-                altura - 200,
-                width=240,
-                height=90,
-                preserveAspectRatio=True,
-                mask="auto"
-            )
+    def desenhar_secao(titulo, campos):
+        nonlocal y
+        cor = CORES_SECAO.get(titulo, HexColor("#0A3D62"))
 
-        c.setFont("Helvetica-Bold", 22)
-        c.setFillColor(azul)
-        c.drawCentredString(largura / 2, altura - 300,
-                            "FICHA DE CAPTAÇÃO DE IMÓVEL")
+        c.setFillColor(cor)
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(margem_x, y, titulo)
+        y -= 18
 
-        c.setFont("Helvetica", 14)
-        c.setFillColor(preto)
+        for campo in campos:
+            valor = str(dados.get(campo, "—"))
 
-        c.drawCentredString(
-            largura / 2, altura - 360,
-            f"Proprietário: {dados.get('NOME DO PROPRIETÁRIO/EMPRESA', '—')}"
-        )
+            c.setFillColor(HexColor("#000000"))
+            c.setFont("Helvetica-Bold", 10)
+            c.drawString(margem_x, y, campo)
 
-        c.drawCentredString(
-            largura / 2, altura - 390,
-            f"Corretor: {dados.get('CORRETOR CAPTADOR', '—')}"
-        )
+            c.setFont("Helvetica", 10)
+            y = desenhar_texto(c, valor, margem_x + 180, y, largura_util - 190)
 
-        c.drawCentredString(
-            largura / 2, altura - 420,
-            f"Código do Imóvel: {dados.get('CÓD DO IMÓVEL', '—')}"
-        )
+        y -= 10
 
-        c.setFont("Helvetica", 10)
-        c.setFillColor(cinza)
-        c.drawCentredString(
-            largura / 2, 100,
-            f"Gerado em {datetime.now().strftime('%d/%m/%Y %H:%M')}"
-        )
-
-        c.showPage()
-
-    # =====================================================
-    # FORMATADORES
-    # =====================================================
-
-    def moeda(valor):
-        try:
-            valor = str(valor).replace(".", "").replace(",", ".")
-            n = float(valor)
-            return f"R$ {n:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-        except:
-            return valor
-
-    def sim_nao(valor, x, y):
-        v = valor.upper()
-        if v == "SIM":
-            c.setFillColor(verde)
-            c.drawString(x, y, "✔ SIM")
-        elif v in ["NÃO", "NAO"]:
-            c.setFillColor(vermelho)
-            c.drawString(x, y, "✖ NÃO")
-        else:
-            c.setFillColor(preto)
-            c.drawString(x, y, valor)
-        c.setFillColor(preto)
-        return y - 14
-
-    # =====================================================
-    # SEÇÕES (2 COLUNAS)
-    # =====================================================
-
+    # ===== SEÇÕES =====
     secoes = {
         "CORRETOR": [
             "CORRETOR CAPTADOR",
@@ -315,129 +269,38 @@ def gerar_pdf(buffer, dados):
         ],
     }
 
-    col_x = [margem_x, margem_x + largura_util / 2]
-    largura_col = (largura_util / 2) - 20
-
-    def secao(titulo, campos):
-        nonlocal y
-
-        c.setFont("Helvetica-Bold", 13)
-        c.setFillColor(azul)
-
-        if y < 140:
-            nova_pagina()
-
-        c.drawString(margem_x, y, titulo)
-        y -= 20
-
-        col = 0
-        y_base = y
-
-        for campo in campos:
-            valor = str(dados.get(campo, "—"))
-
-            if "PREÇO" in campo or "VALOR" in campo:
-                valor = moeda(valor)
-
-            c.setFont("Helvetica-Bold", 9)
-            c.drawString(col_x[col], y, campo)
-            y -= 12
-
-            c.setFont("Helvetica", 10)
-
-            if valor.upper() in ["SIM", "NÃO", "NAO"]:
-                y = sim_nao(valor, col_x[col], y)
-            else:
-                linhas = simpleSplit(valor, "Helvetica", 10, largura_col)
-                for l in linhas:
-                    c.drawString(col_x[col], y, l)
-                    y -= 12
-
-            if col == 0:
-                col = 1
-                y = y_base
-            else:
-                col = 0
-                y_base = min(y, y_base) - 18
-                y = y_base
-
-            if y < 80:
-                nova_pagina()
-
-    # =====================================================
-    # FOTOS
-    # =====================================================
-
-    def fotos():
-        fotos = dados.get("COLOQUE AS FOTOS DO IMÓVEL - PART 1", [])
-        if not isinstance(fotos, list):
-            return
-
-        margem = 40
-        img_w = (largura - margem * 3) / 2
-        img_h = 180
-
-        x_pos = [margem, margem * 2 + img_w]
-        y_img = altura - 100
-        col = 0
-
-        for url in fotos:
-            try:
-                img = ImageReader(url)
-                c.drawImage(img, x_pos[col], y_img - img_h,
-                            width=img_w, height=img_h,
-                            preserveAspectRatio=True, mask="auto")
-
-                col += 1
-                if col > 1:
-                    col = 0
-                    y_img -= img_h + 20
-
-                if y_img < 200:
-                    c.showPage()
-                    y_img = altura - 100
-            except:
-                pass
-
-        c.showPage()
-
-    # =====================================================
-    # QR CODE
-    # =====================================================
-
-    def qrcode_imovel():
-        valor = dados.get("LINK DO IMÓVEL") or dados.get("CÓD DO IMÓVEL")
-        if not valor:
-            return
-
-        qr = qrcode.make(valor)
-        buf = io.BytesIO()
-        qr.save(buf, format="PNG")
-        buf.seek(0)
-
-        c.drawImage(
-            ImageReader(buf),
-            largura / 2 - 60,
-            80,
-            width=120,
-            height=120
-        )
-
-        c.setFont("Helvetica", 9)
-        c.drawCentredString(largura / 2, 60,
-                            "Escaneie para acessar o imóvel")
-
-    # =====================================================
-    # EXECUÇÃO
-    # =====================================================
-
-    capa()
-    cabecalho()
-
     for titulo, campos in secoes.items():
-        secao(titulo, campos)
+        if y < 120:
+            nova_pagina()
+        desenhar_secao(titulo, campos)
 
-    fotos()
-    qrcode_imovel()
-    rodape()
     c.save()
+
+# ===== API =====
+@app.route("/captacao", methods=["POST"])
+def captacao():
+    dados = request.get_json()
+    if not dados:
+        return {"erro": "Dados vazios"}, 400
+
+    buffer = io.BytesIO()
+
+    nome_pdf = f"CAPTACAO - {dados.get('NOME DO PROPRIETÁRIO/EMPRESA','SEM_NOME')} - {datetime.now().strftime('%d-%m-%Y')}.pdf"
+    caminho_temp = os.path.join(BASE_DIR, "temp.pdf")
+
+    gerar_pdf(buffer, dados, "TEMP")
+    buffer.seek(0)
+
+    with open(caminho_temp, "wb") as f:
+        f.write(buffer.read())
+
+    link_pdf = salvar_no_drive(caminho_temp, nome_pdf)
+
+    buffer_final = io.BytesIO()
+    gerar_pdf(buffer_final, dados, link_pdf)
+    buffer_final.seek(0)
+
+    os.remove(caminho_temp)
+    os.remove(os.path.join(BASE_DIR, "qr_temp.png"))
+
+    return send_file(buffer_final, mimetype="application/pdf")

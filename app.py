@@ -13,6 +13,7 @@ app = Flask(__name__)
 def home():
     return "API de Captação Online OK"
 
+
 @app.route("/captacao", methods=["POST"])
 def captacao():
     dados = request.get_json()
@@ -24,7 +25,7 @@ def captacao():
     gerar_pdf(buffer, dados)
     buffer.seek(0)
 
-    nome_arquivo = f"CAPTACAO_{datetime.now().strftime('%d-%m-%Y_%H-%M')}.pdf"
+    nome_arquivo = f"captacao_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
 
     return send_file(
         buffer,
@@ -33,7 +34,8 @@ def captacao():
         mimetype="application/pdf"
     )
 
-# ======================================================
+
+# ===================== PDF =====================
 
 def gerar_pdf(buffer, dados):
     c = canvas.Canvas(buffer, pagesize=A4)
@@ -49,36 +51,63 @@ def gerar_pdf(buffer, dados):
     margem_x = 40
     largura_util = largura - (margem_x * 2)
 
-    # ===== CABEÇALHO =====
-    if os.path.exists(logo_path):
-        c.drawImage(
-            logo_path,
-            margem_x,
-            altura - 80,
-            width=150,
-            height=55,
-            preserveAspectRatio=True,
-            mask="auto"
+    # ---------- CABEÇALHO ----------
+    def desenhar_cabecalho():
+        if os.path.exists(logo_path):
+            c.drawImage(
+                logo_path,
+                margem_x,
+                altura - 80,
+                width=150,
+                height=55,
+                preserveAspectRatio=True,
+                mask="auto"
+            )
+
+        c.setFont("Helvetica-Bold", 18)
+        c.setFillColor(azul)
+        c.drawCentredString(largura / 2 + 40, altura - 60, "FICHA DE CAPTAÇÃO DE IMÓVEL")
+
+        c.setLineWidth(1)
+        c.line(margem_x, altura - 90, largura - margem_x, altura - 90)
+
+        c.setFont("Helvetica", 9)
+        c.setFillColor(cinza)
+        c.drawRightString(
+            largura - margem_x,
+            altura - 105,
+            datetime.now().strftime("%d/%m/%Y %H:%M")
         )
 
-    c.setFont("Helvetica-Bold", 18)
-    c.setFillColor(azul)
-    c.drawCentredString(largura / 2 + 40, altura - 60, "FICHA DE CAPTAÇÃO DE IMÓVEL")
+    # ---------- RODAPÉ ----------
+    def desenhar_rodape():
+        c.setFont("Helvetica", 8)
+        c.setFillColor(HexColor("#777777"))
+        c.drawRightString(largura - 40, 30, f"Página {c.getPageNumber()}")
 
-    c.setLineWidth(1)
-    c.line(margem_x, altura - 90, largura - margem_x, altura - 90)
-
-    c.setFont("Helvetica", 9)
-    c.setFillColor(cinza)
-    c.drawRightString(
-        largura - margem_x,
-        altura - 105,
-        datetime.now().strftime("%d/%m/%Y %H:%M")
-    )
-
+    desenhar_cabecalho()
     y = altura - 130
 
-    # ===== SEÇÕES =====
+    # ---------- NOVA PÁGINA ----------
+    def nova_pagina():
+        nonlocal y
+        desenhar_rodape()
+        c.showPage()
+        desenhar_cabecalho()
+        y = altura - 130
+
+    # ---------- TEXTO LONGO ----------
+    def desenhar_texto_longo(c, texto, x, y, largura_max, altura_pagina, margem_inferior):
+        linhas = simpleSplit(texto, "Helvetica", 10, largura_max)
+        for linha in linhas:
+            if y < margem_inferior:
+                nova_pagina()
+                y = altura - 150
+            c.drawString(x, y, linha)
+            y -= 12
+        return y - 6
+
+# ===== SEÇÕES =====
     secoes = {
         "CORRETOR": [
             "CORRETOR CAPTADOR",
@@ -208,24 +237,19 @@ def gerar_pdf(buffer, dados):
             " Declaro que as informações prestadas são verdadeiras e autorizo a divulgação do"
             "imóvel para fins de venda/locação.",
         ],
-    }
-
-    def nova_pagina():
-        nonlocal y
-        c.showPage()
-        y = altura - 130
+}
+    LARGURA_TEXTO = largura_util - 190
 
     def desenhar_secao(titulo, campos):
         nonlocal y
 
         altura_real = 30
-
         for campo in campos:
             valor = str(dados.get(campo, "—"))
-            linhas = simpleSplit(valor, "Helvetica", 10, largura_util - 160)
+            linhas = simpleSplit(valor, "Helvetica", 10, LARGURA_TEXTO)
             altura_real += 18 + (len(linhas) * 12)
 
-        if y - altura_real < 70:
+        if y - altura_real < 80:
             nova_pagina()
 
         c.setStrokeColor(azul)
@@ -245,18 +269,24 @@ def gerar_pdf(buffer, dados):
             c.setFillColor(preto)
             c.drawString(margem_x + 10, y_cursor, campo)
 
-            linhas = simpleSplit(valor, "Helvetica", 10, largura_util - 160)
+            x_valor = margem_x + 170
+
             c.setFont("Helvetica", 10)
+            y_cursor = desenhar_texto_longo(
+                c,
+                valor,
+                x_valor,
+                y_cursor,
+                LARGURA_TEXTO,
+                altura,
+                60
+            )
 
-            for linha in linhas:
-                c.drawString(margem_x + 150, y_cursor, linha)
-                y_cursor -= 12
+        y -= altura_real + 15
 
-            y_cursor -= 8
-
-        y -= altura_real + 18
-
+    # ---------- DESENHAR PDF ----------
     for titulo, campos in secoes.items():
         desenhar_secao(titulo, campos)
 
+    desenhar_rodape()
     c.save()

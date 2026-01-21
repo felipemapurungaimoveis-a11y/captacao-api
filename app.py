@@ -243,46 +243,82 @@ def gerar_pdf(buffer, dados):
     def desenhar_secao(titulo, campos):
         nonlocal y
 
-        altura_real = 30
-        for campo in campos:
-            valor = str(dados.get(campo, "—"))
-            linhas = simpleSplit(valor, "Helvetica", 10, LARGURA_TEXTO)
-            altura_real += 18 + (len(linhas) * 12)
-
-        if y - altura_real < 80:
-            nova_pagina()
-
-        c.setStrokeColor(azul)
-        c.setLineWidth(1)
-        c.rect(margem_x, y - altura_real, largura_util, altura_real)
+        coluna_x = [margem_x + 10, margem_x + largura_util / 2 + 10]
+        largura_coluna = (largura_util / 2) - 30
 
         c.setFont("Helvetica-Bold", 12)
         c.setFillColor(azul)
-        c.drawString(margem_x + 10, y - 20, titulo)
 
-        y_cursor = y - 38
+        if y < 120:
+            nova_pagina()
+
+        c.drawString(margem_x + 10, y, titulo)
+        y -= 20
+
+        col = 0
+        y_inicial = y
 
         for campo in campos:
             valor = str(dados.get(campo, "—"))
 
-            c.setFont("Helvetica-Bold", 10)
+            # Detecta valores monetários
+            if "PREÇO" in campo or "VALOR" in campo or "R$" in valor:
+                valor = formatar_moeda(valor)
+
+            c.setFont("Helvetica-Bold", 9)
             c.setFillColor(preto)
-            c.drawString(margem_x + 10, y_cursor, campo)
+            c.drawString(coluna_x[col], y, campo)
 
-            x_valor = margem_x + 170
-
+            y -= 12
             c.setFont("Helvetica", 10)
-            y_cursor = desenhar_texto_longo(
-                c,
-                valor,
-                x_valor,
-                y_cursor,
-                LARGURA_TEXTO,
-                altura,
-                60
-            )
 
-        y -= altura_real + 15
+            # SIM / NÃO
+            if valor.upper() in ["SIM", "NÃO", "NAO"]:
+                y = desenhar_sim_nao(c, valor, coluna_x[col], y)
+            else:
+                linhas = simpleSplit(valor, "Helvetica", 10, largura_coluna)
+                for linha in linhas:
+                    c.drawString(coluna_x[col], y, linha)
+                    y -= 12
+
+            # Alterna coluna
+            if col == 0:
+                col = 1
+                y = y_inicial
+            else:
+                col = 0
+                y = min(y, y_inicial) - 18
+                y_inicial = y
+
+            if y < 80:
+                nova_pagina()
+                y -= 20
+
+    def formatar_moeda(valor):
+        try:
+            valor = str(valor).replace(".", "").replace(",", ".")
+            numero = float(valor)
+            return f"R$ {numero:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        except:
+            return valor
+
+    def desenhar_sim_nao(c, texto, x, y):
+        texto = texto.strip().upper()
+
+        if texto == "SIM":
+            c.setFillColor(HexColor("#2E7D32"))
+            c.drawString(x, y, "✔ SIM")
+            c.setFillColor(HexColor("#000000"))
+            return y - 14
+
+        if texto == "NÃO" or texto == "NAO":
+            c.setFillColor(HexColor("#C62828"))
+            c.drawString(x, y, "✖ NÃO")
+            c.setFillColor(HexColor("#000000"))
+            return y - 14
+
+        c.drawString(x, y, texto)
+        return y - 14
 
     # ---------- DESENHAR PDF ----------
     for titulo, campos in secoes.items():

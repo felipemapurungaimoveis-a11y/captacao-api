@@ -27,81 +27,62 @@ def captacao():
         mimetype="application/pdf"
     )
 
-# =========================================================
-# CORES
-# =========================================================
-azul = HexColor("#0A3D62")
-cinza = HexColor("#555555")
-preto = HexColor("#000000")
-verde = HexColor("#2E7D32")
-vermelho = HexColor("#C62828")
-
-# =========================================================
-# FORMATADORES
-# =========================================================
-def eh_valor(campo):
-    campo = campo.upper()
-    return any(p in campo for p in ["PREÇO", "VALOR", "COMISSÃO", "IPTU", "CONDOMÍNIO"])
+# ======================================================
+# UTILITÁRIOS
+# ======================================================
 
 def formatar_valor(valor):
     try:
-        v = float(str(valor).replace(".", "").replace(",", "."))
-        return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        valor = float(str(valor).replace(".", "").replace(",", "."))
+        return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     except:
-        return str(valor)
-
-def campo_booleano(campo):
-    campo = campo.upper()
-    return any(p in campo for p in ["ACEITA", "POSSUI", "TEM", "É", "ESTÁ"])
+        return valor
 
 def normalizar_bool(valor):
-    if isinstance(valor, str):
-        v = valor.strip().lower()
-        if v in ["sim", "s", "true", "1"]:
-            return True
-        if v in ["não", "nao", "n", "false", "0"]:
-            return False
+    if str(valor).strip().lower() in ["sim", "yes", "true", "1"]:
+        return True
+    if str(valor).strip().lower() in ["não", "nao", "no", "false", "0"]:
+        return False
     return None
 
+def eh_valor(campo):
+    return any(x in campo.upper() for x in ["PREÇO", "VALOR", "IPTU", "CONDOMÍNIO"])
+
 def desenhar_badge(c, x, y, texto, cor):
-    largura = 42
     c.setFillColor(cor)
-    c.roundRect(x, y, largura, 16, 8, fill=1, stroke=0)
-    c.setFont("Helvetica-Bold", 9)
+    c.roundRect(x, y, 38, 16, 6, fill=1, stroke=0)
     c.setFillColor(HexColor("#FFFFFF"))
-    c.drawCentredString(x + largura / 2, y + 4, texto)
+    c.setFont("Helvetica-Bold", 8)
+    c.drawCentredString(x + 19, y + 5, texto)
 
-# =========================================================
-# PDF
-# =========================================================
-def gerar_pdf(buffer, dados):
-    c = canvas.Canvas(buffer, pagesize=A4)
-    largura, altura = A4
+def texto_quebrado(texto, largura):
+    return simpleSplit(str(texto), "Helvetica", 10, largura)
 
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    logo_path = os.path.join(BASE_DIR, "logo.png")
+# ======================================================
+# CAPA
+# ======================================================
 
-    margem_x = 40
-    largura_util = largura - (margem_x * 2)
-    LARG_COL = (largura_util - 20) / 2
+def desenhar_capa(c, largura, altura, dados, logo_path):
+    azul = HexColor("#0A3D62")
+    cinza = HexColor("#555555")
 
-    # ================= CAPA =================
     if os.path.exists(logo_path):
         c.drawImage(
             logo_path,
-            largura / 2 - 90,
-            altura - 170,
-            width=180,
-            height=65,
-            preserveAspectRatio=True
+            largura / 2 - 80,
+            altura - 180,
+            width=160,
+            height=60,
+            preserveAspectRatio=True,
+            mask="auto"
         )
 
     c.setFont("Helvetica-Bold", 26)
     c.setFillColor(azul)
-    c.drawCentredString(largura / 2, altura - 260, "FICHA DE CAPTAÇÃO DE IMÓVEL")
+    c.drawCentredString(largura / 2, altura - 280, "FICHA DE CAPTAÇÃO DE IMÓVEL")
 
-    c.setFont("Helvetica", 14)
-    y_info = altura - 330
+    c.setLineWidth(2)
+    c.line(largura / 2 - 200, altura - 305, largura / 2 + 200, altura - 305)
 
     infos = [
         ("PROPRIETÁRIO", dados.get("NOME DO PROPRIETÁRIO/EMPRESA", "—")),
@@ -110,40 +91,64 @@ def gerar_pdf(buffer, dados):
         ("DATA", datetime.now().strftime("%d/%m/%Y")),
     ]
 
+    y = altura - 360
     for titulo, valor in infos:
         c.setFont("Helvetica-Bold", 11)
         c.setFillColor(cinza)
-        c.drawCentredString(largura / 2, y_info, titulo)
+        c.drawCentredString(largura / 2, y, titulo)
 
-        c.setFont("Helvetica", 15)
-        c.setFillColor(preto)
-        c.drawCentredString(largura / 2, y_info - 22, str(valor))
-        y_info -= 70
+        c.setFont("Helvetica", 14)
+        c.drawCentredString(largura / 2, y - 22, valor)
 
+        y -= 70
+
+# ======================================================
+# PDF PRINCIPAL
+# ======================================================
+
+def gerar_pdf(buffer, dados):
+    c = canvas.Canvas(buffer, pagesize=A4)
+    largura, altura = A4
+
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    logo_path = os.path.join(BASE_DIR, "logo.png")
+
+    desenhar_capa(c, largura, altura, dados, logo_path)
     c.showPage()
 
-    # ================= CABEÇALHO =================
+    margem_x = 40
+    largura_util = largura - margem_x * 2
+    LARG_COL = (largura_util - 20) / 2
+
+    azul = HexColor("#0A3D62")
+    cinza = HexColor("#666666")
+    preto = HexColor("#000000")
+    verde = HexColor("#2E7D32")
+    vermelho = HexColor("#C62828")
+
+    CORES_SECAO = {
+        "CORRETOR": HexColor("#0A3D62"),
+        "VALORES": HexColor("#B71C1C"),
+        "DESCRIÇÃO COMPLEMENTAR": HexColor("#37474F"),
+        "AUTORIZAÇÃO": HexColor("#263238"),
+    }
+
     def cabecalho():
         if os.path.exists(logo_path):
-            c.drawImage(
-                logo_path,
-                margem_x,
-                altura - 80,
-                width=120,
-                height=45,
-                preserveAspectRatio=True
-            )
+            c.drawImage(logo_path, margem_x, altura - 80, width=110, height=40, mask="auto")
 
         c.setFont("Helvetica-Bold", 16)
         c.setFillColor(azul)
-        c.drawCentredString(largura / 2, altura - 55, "FICHA DE CAPTAÇÃO DE IMÓVEL")
+        c.drawCentredString(largura / 2 + 30, altura - 55, "FICHA DE CAPTAÇÃO DE IMÓVEL")
+
+        c.line(margem_x, altura - 90, largura - margem_x, altura - 90)
 
     def rodape():
         c.setFont("Helvetica", 8)
         c.setFillColor(cinza)
         c.drawRightString(largura - margem_x, 30, f"Página {c.getPageNumber()}")
 
-    y = altura - 120
+    y = altura - 130
     cabecalho()
 
     def nova_pagina():
@@ -151,30 +156,23 @@ def gerar_pdf(buffer, dados):
         rodape()
         c.showPage()
         cabecalho()
-        y = altura - 120
-
-    def texto_quebrado(texto, largura_max):
-        return simpleSplit(str(texto), "Helvetica", 10, largura_max)
-
-    CORES_SECAO = {
-        "VALORES": HexColor("#B71C1C"),
-        "DESCRIÇÃO COMPLEMENTAR": HexColor("#37474F"),
-    }
+        y = altura - 130
 
     def desenhar_secao(titulo, campos):
         nonlocal y
         cor = CORES_SECAO.get(titulo, azul)
 
-        altura_real = 40 + len(campos) * 45
-        if y - altura_real < 120:
+        altura = 50
+        for campo in campos:
+            valor = dados.get(campo, "—")
+            linhas = texto_quebrado(valor, LARG_COL - 20)
+            altura += max(55, len(linhas) * 14)
+
+        if y - altura < 120:
             nova_pagina()
 
-        c.setStrokeColor(cor)
-        c.setLineWidth(1.4)
-        c.rect(margem_x, y - altura_real, largura_util, altura_real)
-
         c.setFillColor(cor)
-        c.rect(margem_x, y - 32, largura_util, 28, fill=1, stroke=0)
+        c.rect(margem_x, y - 30, largura_util, 26, fill=1, stroke=0)
 
         c.setFont("Helvetica-Bold", 13)
         c.setFillColor(HexColor("#FFFFFF"))
@@ -187,37 +185,45 @@ def gerar_pdf(buffer, dados):
             valor = dados.get(campo, "—")
             x = margem_x + (LARG_COL + 20 if coluna else 0)
 
-            c.setFont("Helvetica-Bold", 10)
-            c.setFillColor(preto)
-            c.drawString(x + 10, y_cursor, campo)
+            c.setFont("Helvetica-Bold", 9)
+            c.setFillColor(cinza)
+            c.drawString(x + 10, y_cursor, campo.upper())
 
-            if campo_booleano(campo):
-                bool_val = normalizar_bool(valor)
-                if bool_val is not None:
-                    desenhar_badge(
-                        c,
-                        x + 10,
-                        y_cursor - 16,
-                        "SIM" if bool_val else "NÃO",
-                        verde if bool_val else vermelho
-                    )
-                else:
-                    c.drawString(x + 10, y_cursor - 14, str(valor))
+            c.line(x + 10, y_cursor - 3, x + LARG_COL - 10, y_cursor - 3)
+
+            bool_val = normalizar_bool(valor)
+
+            if bool_val is not None:
+                desenhar_badge(
+                    c,
+                    x + 10,
+                    y_cursor - 20,
+                    "SIM" if bool_val else "NÃO",
+                    verde if bool_val else vermelho
+                )
+                altura_campo = 40
             else:
                 if eh_valor(campo):
                     valor = formatar_valor(valor)
 
-                linhas = texto_quebrado(valor, LARG_COL - 20)
-                y_texto = y_cursor - 14
-                for linha in linhas:
+                c.setFont("Helvetica", 10)
+                c.setFillColor(preto)
+                y_texto = y_cursor - 18
+                for linha in texto_quebrado(valor, LARG_COL - 20):
                     c.drawString(x + 10, y_texto, linha)
                     y_texto -= 12
 
-            coluna = 1 - coluna
-            if coluna == 0:
-                y_cursor -= 50
+                altura_campo = abs(y_texto - y_cursor)
 
-        y -= altura_real + 30
+            if coluna:
+                y_cursor -= max(60, altura_campo + 10)
+                coluna = 0
+            else:
+                coluna = 1
+
+        y -= altura + 20
+
+    # ===================== SEÇÕES ======================
 
     secoes = {
         "CORRETOR": [
@@ -345,29 +351,31 @@ def gerar_pdf(buffer, dados):
         ],
 
         "AUTORIZAÇÃO": [
-            " Declaro que as informações prestadas são verdadeiras e autorizo "
-            "a divulgação do imóvel para fins de venda/locação.",
+            " Declaro que as informações prestadas são verdadeiras e autorizo a divulgação do imóvel para fins de venda/locação.",
         ],
     }
 
     for titulo, campos in secoes.items():
         desenhar_secao(titulo, campos)
 
-    # ================= ASSINATURAS (PREMIUM) =================
-    nova_pagina()
+    # ===================== ASSINATURAS ======================
 
-    c.setFont("Helvetica-Bold", 14)
-    c.drawCentredString(largura / 2, altura - 120, "ASSINATURAS")
+    if y < 200:
+        nova_pagina()
 
-    y_ass = altura - 220
-    largura_linha = 220
+    c.setFont("Helvetica-Bold", 11)
+    c.drawCentredString(largura / 2, y - 20, "ASSINATURAS")
 
-    for nome in ["CLIENTE / PROPRIETÁRIO", "CORRETOR", "IMOBILIÁRIA"]:
-        x = (largura - largura_linha) / 2
-        c.line(x, y_ass, x + largura_linha, y_ass)
-        c.setFont("Helvetica", 10)
-        c.drawCentredString(largura / 2, y_ass - 18, nome)
-        y_ass -= 90
+    y_ass = y - 80
+    linhas = [
+        ("PROPRIETÁRIO", margem_x),
+        ("CORRETOR", largura / 2 - 80),
+        ("IMOBILIÁRIA", largura - margem_x - 200),
+    ]
+
+    for titulo, x in linhas:
+        c.line(x, y_ass, x + 180, y_ass)
+        c.drawCentredString(x + 90, y_ass - 14, titulo)
 
     rodape()
     c.save()

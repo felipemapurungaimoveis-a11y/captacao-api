@@ -6,136 +6,66 @@ from reportlab.lib.utils import simpleSplit
 from datetime import datetime
 import io
 import os
-import qrcode
-
-# ===== GOOGLE DRIVE =====
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload
-
-# ===== CONFIG =====
-PASTA_DRIVE_ID = "1Acbxy3rMIUTo1wklCLJMRTfiYWJPqFXf"
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-LOGO_PATH = os.path.join(BASE_DIR, "logo.png")
-CREDENCIAL = os.path.join(BASE_DIR, "credentials.json")
-
-SCOPES = ["https://www.googleapis.com/auth/drive"]
 
 app = Flask(__name__)
 
-# ===== CORES POR SEÇÃO =====
-CORES_SECAO = {
-    "CORRETOR": HexColor("#0A3D62"),
-    "CÓDIGO DO IMÓVEL": HexColor("#1B5E20"),
-    "DADOS DO PROPRIETÁRIO": HexColor("#283593"),
-    "DADOS DO IMÓVEL DO PROPRIETÁRIO": HexColor("#4E342E"),
-    "DADOS DO IMÓVEL CAPTADO": HexColor("#1565C0"),
-    "CARACTERÍSTICAS GERAIS": HexColor("#455A64"),
-    "VALORES": HexColor("#B71C1C"),
-    "DESCRIÇÃO COMPLEMENTAR": HexColor("#37474F"),
-    "AUTORIZAÇÃO": HexColor("#263238"),
-}
+@app.route("/")
+def home():
+    return "API de Captação Online OK"
 
-# ===== DRIVE SERVICE =====
-def drive_service():
-    creds = service_account.Credentials.from_service_account_file(
-        CREDENCIAL, scopes=SCOPES
+@app.route("/captacao", methods=["POST"])
+def captacao():
+    dados = request.get_json()
+
+    if not dados:
+        return {"erro": "Nenhum dado recebido"}, 400
+
+    buffer = io.BytesIO()
+    gerar_pdf(buffer, dados)
+    buffer.seek(0)
+
+    nome_arquivo = f"CAPTACAO_{datetime.now().strftime('%d-%m-%Y_%H-%M')}.pdf"
+
+    return send_file(
+        buffer,
+        as_attachment=True,
+        download_name=nome_arquivo,
+        mimetype="application/pdf"
     )
-    return build("drive", "v3", credentials=creds)
 
-# ===== SALVAR PDF NO DRIVE =====
-def salvar_no_drive(caminho, nome):
-    service = drive_service()
+# =====================================================
+# GERAÇÃO DO PDF
+# =====================================================
 
-    media = MediaFileUpload(caminho, mimetype="application/pdf")
-    file_metadata = {
-        "name": nome,
-        "parents": [PASTA_DRIVE_ID]
-    }
-
-    file = service.files().create(
-        body=file_metadata,
-        media_body=media,
-        fields="id"
-    ).execute()
-
-    file_id = file.get("id")
-
-    # Tornar público
-    service.permissions().create(
-        fileId=file_id,
-        body={"type": "anyone", "role": "reader"}
-    ).execute()
-
-    return f"https://drive.google.com/file/d/{file_id}/view"
-
-# ===== GERAR PDF =====
-def gerar_pdf(buffer, dados, qr_url):
+def gerar_pdf(buffer, dados):
     c = canvas.Canvas(buffer, pagesize=A4)
     largura, altura = A4
 
+    azul = HexColor("#0A3D62")
+    cinza = HexColor("#444444")
+    preto = HexColor("#000000")
+
     margem_x = 40
     largura_util = largura - (margem_x * 2)
-    y = altura - 120
+    y = altura - 60
 
     # ===== CABEÇALHO =====
-    if os.path.exists(LOGO_PATH):
-        c.drawImage(LOGO_PATH, margem_x, altura - 80, width=140, height=50, preserveAspectRatio=True)
-
     c.setFont("Helvetica-Bold", 18)
-    c.drawCentredString(largura / 2 + 40, altura - 55, "FICHA DE CAPTAÇÃO DE IMÓVEL")
+    c.setFillColor(azul)
+    c.drawCentredString(largura / 2, y, "FICHA DE CAPTAÇÃO DE IMÓVEL")
 
     c.setLineWidth(1)
-    c.line(margem_x, altura - 90, largura - margem_x, altura - 90)
+    c.line(margem_x, y - 15, largura - margem_x, y - 15)
 
     c.setFont("Helvetica", 9)
-    c.drawRightString(largura - margem_x, altura - 105,
-                      datetime.now().strftime("%d/%m/%Y %H:%M"))
+    c.setFillColor(cinza)
+    c.drawRightString(
+        largura - margem_x,
+        y - 30,
+        datetime.now().strftime("%d/%m/%Y %H:%M")
+    )
 
-    # ===== QR CODE =====
-    qr_img = qrcode.make(qr_url)
-    qr_path = os.path.join(BASE_DIR, "qr_temp.png")
-    qr_img.save(qr_path)
-
-    c.drawImage(qr_path, largura - 140, 60, width=90, height=90)
-    c.setFont("Helvetica", 8)
-    c.drawCentredString(largura - 95, 50, "Acesse este imóvel")
-
-    # ===== FUNÇÕES =====
-    def nova_pagina():
-        nonlocal y
-        c.showPage()
-        y = altura - 120
-
-    def desenhar_texto(c, texto, x, y, largura_max):
-        linhas = simpleSplit(texto, "Helvetica", 10, largura_max)
-        for linha in linhas:
-            if y < 60:
-                nova_pagina()
-            c.drawString(x, y, linha)
-            y -= 12
-        return y - 4
-
-    def desenhar_secao(titulo, campos):
-        nonlocal y
-        cor = CORES_SECAO.get(titulo, HexColor("#0A3D62"))
-
-        c.setFillColor(cor)
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(margem_x, y, titulo)
-        y -= 18
-
-        for campo in campos:
-            valor = str(dados.get(campo, "—"))
-
-            c.setFillColor(HexColor("#000000"))
-            c.setFont("Helvetica-Bold", 10)
-            c.drawString(margem_x, y, campo)
-
-            c.setFont("Helvetica", 10)
-            y = desenhar_texto(c, valor, margem_x + 180, y, largura_util - 190)
-
-        y -= 10
+    y -= 60
 
     # ===== SEÇÕES =====
     secoes = {
@@ -264,43 +194,56 @@ def gerar_pdf(buffer, dados, qr_url):
         ],
 
         "AUTORIZAÇÃO": [
-            " Declaro que as informações prestadas são verdadeiras e autorizo a divulgação do"
+            " Declaro que as informações prestadas são verdadeiras e autorizo a divulgação do",
             "imóvel para fins de venda/locação.",
         ],
     }
 
+    def nova_pagina():
+        nonlocal y
+        c.showPage()
+        y = altura - 60
+
     for titulo, campos in secoes.items():
-        if y < 120:
+
+        altura_secao = 28
+        for campo in campos:
+            valor = str(dados.get(campo, "—"))
+            linhas = simpleSplit(valor, "Helvetica", 10, largura_util - 150)
+            altura_secao += 18 + (len(linhas) * 12)
+
+        if y - altura_secao < 60:
             nova_pagina()
-        desenhar_secao(titulo, campos)
+
+        # Caixa da seção
+        c.setStrokeColor(azul)
+        c.setLineWidth(1)
+        c.rect(margem_x, y - altura_secao, largura_util, altura_secao)
+
+        # Título da seção
+        c.setFont("Helvetica-Bold", 12)
+        c.setFillColor(azul)
+        c.drawString(margem_x + 10, y - 18, titulo)
+
+        y_cursor = y - 34
+
+        for campo in campos:
+            valor = str(dados.get(campo, "—"))
+
+            c.setFont("Helvetica-Bold", 10)
+            c.setFillColor(preto)
+            c.drawString(margem_x + 10, y_cursor, campo)
+
+            x_valor = margem_x + 150
+            linhas = simpleSplit(valor, "Helvetica", 10, largura_util - 160)
+
+            c.setFont("Helvetica", 10)
+            for linha in linhas:
+                c.drawString(x_valor, y_cursor, linha)
+                y_cursor -= 12
+
+            y_cursor -= 6
+
+        y -= altura_secao + 15
 
     c.save()
-
-# ===== API =====
-@app.route("/captacao", methods=["POST"])
-def captacao():
-    dados = request.get_json()
-    if not dados:
-        return {"erro": "Dados vazios"}, 400
-
-    buffer = io.BytesIO()
-
-    nome_pdf = f"CAPTACAO - {dados.get('NOME DO PROPRIETÁRIO/EMPRESA','SEM_NOME')} - {datetime.now().strftime('%d-%m-%Y')}.pdf"
-    caminho_temp = os.path.join(BASE_DIR, "temp.pdf")
-
-    gerar_pdf(buffer, dados, "TEMP")
-    buffer.seek(0)
-
-    with open(caminho_temp, "wb") as f:
-        f.write(buffer.read())
-
-    link_pdf = salvar_no_drive(caminho_temp, nome_pdf)
-
-    buffer_final = io.BytesIO()
-    gerar_pdf(buffer_final, dados, link_pdf)
-    buffer_final.seek(0)
-
-    os.remove(caminho_temp)
-    os.remove(os.path.join(BASE_DIR, "qr_temp.png"))
-
-    return send_file(buffer_final, mimetype="application/pdf")

@@ -11,63 +11,139 @@ app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "API de Captação Online OK"
+    return "API PDF OK"
 
 @app.route("/captacao", methods=["POST"])
 def captacao():
     dados = request.get_json()
-
-    if not dados:
-        return {"erro": "Nenhum dado recebido"}, 400
-
     buffer = io.BytesIO()
     gerar_pdf(buffer, dados)
     buffer.seek(0)
 
-    nome_arquivo = f"CAPTACAO_{datetime.now().strftime('%d-%m-%Y_%H-%M')}.pdf"
-
     return send_file(
         buffer,
         as_attachment=True,
-        download_name=nome_arquivo,
+        download_name="captacao.pdf",
         mimetype="application/pdf"
     )
 
-# =====================================================
-# GERAÇÃO DO PDF
-# =====================================================
+# =========================================================
 
 def gerar_pdf(buffer, dados):
     c = canvas.Canvas(buffer, pagesize=A4)
     largura, altura = A4
 
-    azul = HexColor("#0A3D62")
-    cinza = HexColor("#444444")
-    preto = HexColor("#000000")
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    logo_path = os.path.join(BASE_DIR, "logo.png")
 
     margem_x = 40
     largura_util = largura - (margem_x * 2)
-    y = altura - 60
 
-    # ===== CABEÇALHO =====
-    c.setFont("Helvetica-Bold", 18)
-    c.setFillColor(azul)
-    c.drawCentredString(largura / 2, y, "FICHA DE CAPTAÇÃO DE IMÓVEL")
+    azul = HexColor("#0A3D62")
+    cinza = HexColor("#555555")
+    preto = HexColor("#000000")
 
-    c.setLineWidth(1)
-    c.line(margem_x, y - 15, largura - margem_x, y - 15)
+    CORES_SECAO = {
+        "CORRETOR": HexColor("#0A3D62"),
+        "CÓDIGO DO IMÓVEL": HexColor("#1B5E20"),
+        "DADOS DO PROPRIETÁRIO": HexColor("#283593"),
+        "DADOS DO IMÓVEL DO PROPRIETÁRIO": HexColor("#4E342E"),
+        "DADOS DO IMÓVEL CAPTADO": HexColor("#006064"),
+        "VALORES": HexColor("#B71C1C"),
+        "DESCRIÇÃO COMPLEMENTAR": HexColor("#37474F"),
+    }
 
-    c.setFont("Helvetica", 9)
-    c.setFillColor(cinza)
-    c.drawRightString(
-        largura - margem_x,
-        y - 30,
-        datetime.now().strftime("%d/%m/%Y %H:%M")
-    )
+    def cabecalho():
+        if os.path.exists(logo_path):
+            c.drawImage(
+                logo_path, margem_x, altura - 80,
+                width=120, height=45, preserveAspectRatio=True, mask="auto"
+            )
 
-    y -= 60
+        c.setFont("Helvetica-Bold", 18)
+        c.setFillColor(azul)
+        c.drawCentredString(largura / 2 + 30, altura - 55, "FICHA DE CAPTAÇÃO DE IMÓVEL")
 
-    # ===== SEÇÕES =====
+        c.setLineWidth(1)
+        c.line(margem_x, altura - 90, largura - margem_x, altura - 90)
+
+        c.setFont("Helvetica", 9)
+        c.setFillColor(cinza)
+        c.drawRightString(
+            largura - margem_x,
+            altura - 105,
+            datetime.now().strftime("%d/%m/%Y %H:%M")
+        )
+
+    def rodape():
+        c.setFont("Helvetica", 8)
+        c.setFillColor(cinza)
+        c.drawRightString(largura - margem_x, 30, f"Página {c.getPageNumber()}")
+
+    y = altura - 130
+    cabecalho()
+
+    LARG_COL = (largura_util - 20) / 2
+
+    def nova_pagina():
+        nonlocal y
+        rodape()
+        c.showPage()
+        cabecalho()
+        y = altura - 130
+
+    def texto_quebrado(texto, largura_max):
+        return simpleSplit(texto, "Helvetica", 10, largura_max)
+
+    def desenhar_secao(titulo, campos):
+        nonlocal y
+
+        cor = CORES_SECAO.get(titulo, azul)
+        altura_real = 30
+
+        for campo in campos:
+            valor = str(dados.get(campo, "—"))
+            linhas = texto_quebrado(valor, LARG_COL - 20)
+            altura_real += 26 + (len(linhas) * 12)
+
+        if y - altura_real < 80:
+            nova_pagina()
+
+        c.setStrokeColor(cor)
+        c.setLineWidth(1)
+        c.rect(margem_x, y - altura_real, largura_util, altura_real)
+
+        c.setFont("Helvetica-Bold", 12)
+        c.setFillColor(cor)
+        c.drawString(margem_x + 10, y - 20, titulo)
+
+        y_cursor = y - 40
+        coluna = 0
+
+        for campo in campos:
+            valor = str(dados.get(campo, "—"))
+            x = margem_x + (LARG_COL + 20 if coluna else 0)
+
+            c.setFont("Helvetica-Bold", 10)
+            c.setFillColor(preto)
+            c.drawString(x + 10, y_cursor, campo)
+
+            linhas = texto_quebrado(valor, LARG_COL - 20)
+            c.setFont("Helvetica", 10)
+
+            y_texto = y_cursor - 12
+            for linha in linhas:
+                c.drawString(x + 10, y_texto, linha)
+                y_texto -= 12
+
+            if coluna:
+                y_cursor -= max(60, len(linhas) * 12 + 20)
+                coluna = 0
+            else:
+                coluna = 1
+
+        y -= altura_real + 20
+
     secoes = {
         "CORRETOR": [
             "CORRETOR CAPTADOR",
@@ -194,56 +270,13 @@ def gerar_pdf(buffer, dados):
         ],
 
         "AUTORIZAÇÃO": [
-            " Declaro que as informações prestadas são verdadeiras e autorizo a divulgação do",
+            " Declaro que as informações prestadas são verdadeiras e autorizo a divulgação do"
             "imóvel para fins de venda/locação.",
         ],
     }
 
-    def nova_pagina():
-        nonlocal y
-        c.showPage()
-        y = altura - 60
-
     for titulo, campos in secoes.items():
+        desenhar_secao(titulo, campos)
 
-        altura_secao = 28
-        for campo in campos:
-            valor = str(dados.get(campo, "—"))
-            linhas = simpleSplit(valor, "Helvetica", 10, largura_util - 150)
-            altura_secao += 18 + (len(linhas) * 12)
-
-        if y - altura_secao < 60:
-            nova_pagina()
-
-        # Caixa da seção
-        c.setStrokeColor(azul)
-        c.setLineWidth(1)
-        c.rect(margem_x, y - altura_secao, largura_util, altura_secao)
-
-        # Título da seção
-        c.setFont("Helvetica-Bold", 12)
-        c.setFillColor(azul)
-        c.drawString(margem_x + 10, y - 18, titulo)
-
-        y_cursor = y - 34
-
-        for campo in campos:
-            valor = str(dados.get(campo, "—"))
-
-            c.setFont("Helvetica-Bold", 10)
-            c.setFillColor(preto)
-            c.drawString(margem_x + 10, y_cursor, campo)
-
-            x_valor = margem_x + 150
-            linhas = simpleSplit(valor, "Helvetica", 10, largura_util - 160)
-
-            c.setFont("Helvetica", 10)
-            for linha in linhas:
-                c.drawString(x_valor, y_cursor, linha)
-                y_cursor -= 12
-
-            y_cursor -= 6
-
-        y -= altura_secao + 15
-
+    rodape()
     c.save()

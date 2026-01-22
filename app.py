@@ -91,12 +91,10 @@ def desenhar_capa(c, largura, altura, dados, logo_path):
 def gerar_pdf(buffer, dados):
     c = canvas.Canvas(buffer, pagesize=A4)
     largura, altura = A4
-    c = canvas.Canvas(buffer, pagesize=A4)
-    largura, altura = A4
-
 
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     logo_path = os.path.join(BASE_DIR, "logo.png")
+
 
     # ===== CAPA =====
     desenhar_capa(c, largura, altura, dados, logo_path)

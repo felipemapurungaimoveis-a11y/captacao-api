@@ -30,50 +30,55 @@ def desenhar_capa(c, largura, altura, dados, logo_path):
     azul = HexColor("#0A3D62")
     cinza = HexColor("#555555")
 
+    # Fundo branco (garantia)
+    c.setFillColor(HexColor("#FFFFFF"))
+    c.rect(0, 0, largura, altura, fill=1)
+
     # Logo
     if os.path.exists(logo_path):
         c.drawImage(
             logo_path,
-            largura / 2 - 80,
-            altura - 200,
-            width=160,
-            height=60,
+            largura / 2 - 90,
+            altura - 180,
+            width=180,
+            height=65,
             preserveAspectRatio=True,
             mask="auto"
         )
 
-    # Título
-    c.setFont("Helvetica-Bold", 26)
+    # Título principal
+    c.setFont("Helvetica-Bold", 28)
     c.setFillColor(azul)
     c.drawCentredString(
         largura / 2,
-        altura - 300,
+        altura - 280,
         "FICHA DE CAPTAÇÃO DE IMÓVEL"
     )
 
-    # Linha
+    # Linha elegante
     c.setLineWidth(2)
+    c.setStrokeColor(azul)
     c.line(
-        largura / 2 - 150,
-        altura - 320,
-        largura / 2 + 150,
-        altura - 320
+        largura / 2 - 180,
+        altura - 305,
+        largura / 2 + 180,
+        altura - 305
     )
 
-    # Informações principais
-    c.setFont("Helvetica", 14)
+    # Bloco de informações
+    y = altura - 360
+    c.setFont("Helvetica-Bold", 12)
     c.setFillColor(cinza)
 
-    campos = [
+    infos = [
         ("PROPRIETÁRIO", dados.get("NOME DO PROPRIETÁRIO/EMPRESA", "—")),
         ("CORRETOR", dados.get("CORRETOR CAPTADOR", "—")),
         ("CÓDIGO DO IMÓVEL", dados.get("CÓD DO IMÓVEL", "—")),
         ("DATA", datetime.now().strftime("%d/%m/%Y")),
     ]
 
-    y = altura - 380
-    for titulo, valor in campos:
-        c.setFont("Helvetica-Bold", 12)
+    for titulo, valor in infos:
+        c.setFont("Helvetica-Bold", 11)
         c.drawCentredString(largura / 2, y, titulo)
 
         c.setFont("Helvetica", 14)
@@ -106,12 +111,12 @@ def gerar_pdf(buffer, dados):
 
     CORES_SECAO = {
         "CORRETOR": HexColor("#0A3D62"),
-        "CÓDIGO DO IMÓVEL": HexColor("#1B5E20"),
-        "DADOS DO PROPRIETÁRIO": HexColor("#283593"),
-        "DADOS DO IMÓVEL DO PROPRIETÁRIO": HexColor("#4E342E"),
-        "DADOS DO IMÓVEL CAPTADO": HexColor("#006064"),
+        "CÓDIGO DO IMÓVEL": HexColor("##0A3D62"),
+        "DADOS DO PROPRIETÁRIO": HexColor("##0A3D62"),
+        "DADOS DO IMÓVEL DO PROPRIETÁRIO": HexColor("##0A3D62"),
+        "DADOS DO IMÓVEL CAPTADO": HexColor("##0A3D62"),
         "VALORES": HexColor("#B71C1C"),
-        "DESCRIÇÃO COMPLEMENTAR": HexColor("#37474F"),
+        "DESCRIÇÃO COMPLEMENTAR": HexColor("##0A3D62"),
     }
 
     def cabecalho():
@@ -171,8 +176,17 @@ def gerar_pdf(buffer, dados):
             nova_pagina()
 
         c.setStrokeColor(cor)
-        c.setLineWidth(1)
+        c.setLineWidth(1.5)
         c.rect(margem_x, y - altura_real, largura_util, altura_real)
+
+        # Linha sutil abaixo do título
+        c.setLineWidth(0.8)
+        c.line(
+            margem_x + 10,
+            y - 26,
+            margem_x + largura_util - 10,
+            y - 26
+        )
 
         c.setFont("Helvetica-Bold", 12)
         c.setFillColor(cor)
@@ -187,7 +201,8 @@ def gerar_pdf(buffer, dados):
 
             c.setFont("Helvetica-Bold", 10)
             c.setFillColor(preto)
-            c.drawString(x + 10, y_cursor, campo)
+            c.drawString(x + 10, y_cursor + 2, campo)
+
 
             linhas = texto_quebrado(valor, LARG_COL - 20)
             c.setFont("Helvetica", 10)

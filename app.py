@@ -26,15 +26,76 @@ def captacao():
         download_name="captacao.pdf",
         mimetype="application/pdf"
     )
+def desenhar_capa(c, largura, altura, dados, logo_path):
+    azul = HexColor("#0A3D62")
+    cinza = HexColor("#555555")
+
+    # Logo
+    if os.path.exists(logo_path):
+        c.drawImage(
+            logo_path,
+            largura / 2 - 80,
+            altura - 200,
+            width=160,
+            height=60,
+            preserveAspectRatio=True,
+            mask="auto"
+        )
+
+    # Título
+    c.setFont("Helvetica-Bold", 26)
+    c.setFillColor(azul)
+    c.drawCentredString(
+        largura / 2,
+        altura - 300,
+        "FICHA DE CAPTAÇÃO DE IMÓVEL"
+    )
+
+    # Linha
+    c.setLineWidth(2)
+    c.line(
+        largura / 2 - 150,
+        altura - 320,
+        largura / 2 + 150,
+        altura - 320
+    )
+
+    # Informações principais
+    c.setFont("Helvetica", 14)
+    c.setFillColor(cinza)
+
+    campos = [
+        ("PROPRIETÁRIO", dados.get("NOME DO PROPRIETÁRIO/EMPRESA", "—")),
+        ("CORRETOR", dados.get("CORRETOR CAPTADOR", "—")),
+        ("CÓDIGO DO IMÓVEL", dados.get("CÓD DO IMÓVEL", "—")),
+        ("DATA", datetime.now().strftime("%d/%m/%Y")),
+    ]
+
+    y = altura - 380
+    for titulo, valor in campos:
+        c.setFont("Helvetica-Bold", 12)
+        c.drawCentredString(largura / 2, y, titulo)
+
+        c.setFont("Helvetica", 14)
+        c.drawCentredString(largura / 2, y - 22, valor)
+
+        y -= 70
 
 # =========================================================
 
 def gerar_pdf(buffer, dados):
     c = canvas.Canvas(buffer, pagesize=A4)
     largura, altura = A4
+    c = canvas.Canvas(buffer, pagesize=A4)
+    largura, altura = A4
+
 
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     logo_path = os.path.join(BASE_DIR, "logo.png")
+
+    # ===== CAPA =====
+    desenhar_capa(c, largura, altura, dados, logo_path)
+    c.showPage()  # <-- cria a página 2
 
     margem_x = 40
     largura_util = largura - (margem_x * 2)

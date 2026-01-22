@@ -15,7 +15,7 @@ def home():
 
 @app.route("/captacao", methods=["POST"])
 def captacao():
-    dados = request.get_json()
+    dados = request.get_json(force=True, silent=True) or {}
     buffer = io.BytesIO()
     gerar_pdf(buffer, dados)
     buffer.seek(0)

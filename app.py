@@ -6,6 +6,7 @@ from reportlab.lib.utils import simpleSplit
 from datetime import datetime
 import io
 import os
+import re
 
 app = Flask(__name__)
 
@@ -26,15 +27,36 @@ def captacao():
         download_name="captacao.pdf",
         mimetype="application/pdf"
     )
+
+# ================= UTILIDADES =================
+
+def formatar_valor(valor):
+    try:
+        v = float(re.sub(r"[^\d,\.]", "", str(valor)).replace(",", "."))
+        return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    except:
+        return valor
+
+def eh_valor(campo):
+    chaves = ["PREÇO", "VALOR", "IPTU", "CONDOMÍNIO", "COMISSÃO", "ENTRADA"]
+    return any(c in campo.upper() for c in chaves)
+
+def normalizar_bool(valor):
+    if str(valor).strip().upper() in ["SIM", "S", "TRUE", "1"]:
+        return True
+    if str(valor).strip().upper() in ["NÃO", "NAO", "N", "FALSE", "0"]:
+        return False
+    return None
+
+# ================= CAPA =================
+
 def desenhar_capa(c, largura, altura, dados, logo_path):
     azul = HexColor("#0A3D62")
     cinza = HexColor("#555555")
 
-    # Fundo branco (garantia)
     c.setFillColor(HexColor("#FFFFFF"))
     c.rect(0, 0, largura, altura, fill=1)
 
-    # Logo
     if os.path.exists(logo_path):
         c.drawImage(
             logo_path,
@@ -46,30 +68,14 @@ def desenhar_capa(c, largura, altura, dados, logo_path):
             mask="auto"
         )
 
-    # Título principal
     c.setFont("Helvetica-Bold", 28)
     c.setFillColor(azul)
-    c.drawCentredString(
-        largura / 2,
-        altura - 280,
-        "FICHA DE CAPTAÇÃO DE IMÓVEL"
-    )
+    c.drawCentredString(largura / 2, altura - 280, "FICHA DE CAPTAÇÃO DE IMÓVEL")
 
-    # Linha elegante
     c.setLineWidth(2)
-    c.setStrokeColor(azul)
-    c.line(
-        largura / 2 - 180,
-        altura - 305,
-        largura / 2 + 180,
-        altura - 305
-    )
+    c.line(largura / 2 - 180, altura - 305, largura / 2 + 180, altura - 305)
 
-    # Bloco de informações
     y = altura - 360
-    c.setFont("Helvetica-Bold", 12)
-    c.setFillColor(cinza)
-
     infos = [
         ("PROPRIETÁRIO", dados.get("NOME DO PROPRIETÁRIO/EMPRESA", "—")),
         ("CORRETOR", dados.get("CORRETOR CAPTADOR", "—")),
@@ -77,16 +83,16 @@ def desenhar_capa(c, largura, altura, dados, logo_path):
         ("DATA", datetime.now().strftime("%d/%m/%Y")),
     ]
 
-    for titulo, valor in infos:
+    for t, v in infos:
         c.setFont("Helvetica-Bold", 11)
-        c.drawCentredString(largura / 2, y, titulo)
+        c.setFillColor(cinza)
+        c.drawCentredString(largura / 2, y, t)
 
         c.setFont("Helvetica", 14)
-        c.drawCentredString(largura / 2, y - 22, valor)
-
+        c.drawCentredString(largura / 2, y - 22, v)
         y -= 70
 
-# =========================================================
+# ================= PDF =================
 
 def gerar_pdf(buffer, dados):
     c = canvas.Canvas(buffer, pagesize=A4)
@@ -95,10 +101,8 @@ def gerar_pdf(buffer, dados):
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     logo_path = os.path.join(BASE_DIR, "logo.png")
 
-
-    # ===== CAPA =====
     desenhar_capa(c, largura, altura, dados, logo_path)
-    c.showPage()  # <-- cria a página 2
+    c.showPage()
 
     margem_x = 40
     largura_util = largura - (margem_x * 2)
@@ -106,38 +110,15 @@ def gerar_pdf(buffer, dados):
     azul = HexColor("#0A3D62")
     cinza = HexColor("#555555")
     preto = HexColor("#000000")
-
-    CORES_SECAO = {
-        "CORRETOR": HexColor("#0A3D62"),
-        "CÓDIGO DO IMÓVEL": HexColor("##0A3D62"),
-        "DADOS DO PROPRIETÁRIO": HexColor("##0A3D62"),
-        "DADOS DO IMÓVEL DO PROPRIETÁRIO": HexColor("##0A3D62"),
-        "DADOS DO IMÓVEL CAPTADO": HexColor("##0A3D62"),
-        "VALORES": HexColor("#B71C1C"),
-        "DESCRIÇÃO COMPLEMENTAR": HexColor("##0A3D62"),
-    }
+    verde = HexColor("#1B5E20")
+    vermelho = HexColor("#B71C1C")
 
     def cabecalho():
         if os.path.exists(logo_path):
-            c.drawImage(
-                logo_path, margem_x, altura - 80,
-                width=120, height=45, preserveAspectRatio=True, mask="auto"
-            )
-
+            c.drawImage(logo_path, margem_x, altura - 80, width=120, height=45)
         c.setFont("Helvetica-Bold", 18)
         c.setFillColor(azul)
         c.drawCentredString(largura / 2 + 30, altura - 55, "FICHA DE CAPTAÇÃO DE IMÓVEL")
-
-        c.setLineWidth(1)
-        c.line(margem_x, altura - 90, largura - margem_x, altura - 90)
-
-        c.setFont("Helvetica", 9)
-        c.setFillColor(cinza)
-        c.drawRightString(
-            largura - margem_x,
-            altura - 105,
-            datetime.now().strftime("%d/%m/%Y %H:%M")
-        )
 
     def rodape():
         c.setFont("Helvetica", 8)
@@ -157,67 +138,68 @@ def gerar_pdf(buffer, dados):
         y = altura - 130
 
     def texto_quebrado(texto, largura_max):
-        return simpleSplit(texto, "Helvetica", 10, largura_max)
+        return simpleSplit(str(texto), "Helvetica", 10, largura_max)
+
+    def desenhar_badge(x, y, texto, cor):
+        c.setFillColor(cor)
+        c.roundRect(x, y - 14, 50, 16, 6, fill=1)
+        c.setFillColor(HexColor("#FFFFFF"))
+        c.setFont("Helvetica-Bold", 9)
+        c.drawCentredString(x + 25, y - 11, texto)
 
     def desenhar_secao(titulo, campos):
         nonlocal y
 
-        cor = CORES_SECAO.get(titulo, azul)
-        altura_real = 30
-
-        for campo in campos:
-            valor = str(dados.get(campo, "—"))
-            linhas = texto_quebrado(valor, LARG_COL - 20)
-            altura_real += 26 + (len(linhas) * 12)
-
+        altura_real = 30 + len(campos) * 55
         if y - altura_real < 80:
             nova_pagina()
 
-        c.setStrokeColor(cor)
-        c.setLineWidth(1.5)
+        c.setStrokeColor(azul)
         c.rect(margem_x, y - altura_real, largura_util, altura_real)
 
-        # Linha sutil abaixo do título
-        c.setLineWidth(0.8)
-        c.line(
-            margem_x + 10,
-            y - 26,
-            margem_x + largura_util - 10,
-            y - 26
-        )
-
         c.setFont("Helvetica-Bold", 12)
-        c.setFillColor(cor)
+        c.setFillColor(azul)
         c.drawString(margem_x + 10, y - 20, titulo)
 
         y_cursor = y - 40
         coluna = 0
 
         for campo in campos:
-            valor = str(dados.get(campo, "—"))
+            valor = dados.get(campo, "—")
             x = margem_x + (LARG_COL + 20 if coluna else 0)
 
             c.setFont("Helvetica-Bold", 10)
             c.setFillColor(preto)
-            c.drawString(x + 10, y_cursor + 2, campo)
+            c.drawString(x + 10, y_cursor, campo)
 
+            bool_val = normalizar_bool(valor)
+            if bool_val is not None:
+                desenhar_badge(
+                    x + 10,
+                    y_cursor - 6,
+                    "SIM" if bool_val else "NÃO",
+                    verde if bool_val else vermelho
+                )
+            else:
+                if eh_valor(campo):
+                    valor = formatar_valor(valor)
 
-            linhas = texto_quebrado(valor, LARG_COL - 20)
-            c.setFont("Helvetica", 10)
-
-            y_texto = y_cursor - 12
-            for linha in linhas:
-                c.drawString(x + 10, y_texto, linha)
-                y_texto -= 12
+                linhas = texto_quebrado(valor, LARG_COL - 20)
+                c.setFont("Helvetica", 10)
+                y_texto = y_cursor - 14
+                for linha in linhas:
+                    c.drawString(x + 10, y_texto, linha)
+                    y_texto -= 12
 
             if coluna:
-                y_cursor -= max(60, len(linhas) * 12 + 20)
+                y_cursor -= 60
                 coluna = 0
             else:
                 coluna = 1
 
         y -= altura_real + 20
 
+    # === SEÇÕES ===
     secoes = {
         "CORRETOR": [
             "CORRETOR CAPTADOR",
@@ -345,7 +327,7 @@ def gerar_pdf(buffer, dados):
 
         "AUTORIZAÇÃO": [
             " Declaro que as informações prestadas são verdadeiras e autorizo a divulgação do"
-            "imóvel para fins de venda/locação.",
+            " imóvel para fins de venda/locação.",
         ],
     }
 

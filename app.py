@@ -336,24 +336,79 @@ def gerar_pdf(buffer, dados):
         desenhar_secao(t, cpos)
 
     # =====================================================
-    # ASSINATURAS (NOVA PÁGINA)
+    # ASSINATURAS PREMIUM (PÁGINA EXCLUSIVA)
     # =====================================================
 
     nova_pagina()
 
-    c.setFont("Helvetica-Bold", 13)
-    c.drawCentredString(largura/2, y - 30, "ASSINATURAS")
+    c.setFont("Helvetica-Bold", 16)
+    c.setFillColor(preto)
+    c.drawCentredString(
+        largura / 2,
+        altura - 140,
+        "ASSINATURAS"
+    )
 
-    y -= 90
+    # Linha decorativa
+    c.setLineWidth(1)
+    c.line(
+        largura / 2 - 120,
+        altura - 150,
+        largura / 2 + 120,
+        altura - 150
+    )
+
+    y_ass = altura - 260
+
+    # Configurações dos blocos
+    larg_bloco = 220
+    altura_linha = 50
+
     blocos = [
-        ("PROPRIETÁRIO", margem_x),
-        ("CORRETOR", largura/2 - 90),
-        ("IMOBILIÁRIA", largura - margem_x - 180),
+        ("PROPRIETÁRIO / CLIENTE", dados.get("NOME DO PROPRIETÁRIO/EMPRESA", "")),
+        ("CORRETOR RESPONSÁVEL", dados.get("CORRETOR CAPTADOR", "")),
+        ("IMOBILIÁRIA", "ASSINATURA INSTITUCIONAL"),
     ]
 
-    for titulo, x in blocos:
-        c.line(x, y, x + 180, y)
-        c.drawCentredString(x + 90, y - 14, titulo)
+    x_positions = [
+        margem_x,
+        largura / 2 - larg_bloco / 2,
+        largura - margem_x - larg_bloco
+    ]
 
+    for i, (titulo, nome) in enumerate(blocos):
+        x = x_positions[i]
+
+        # Linha de assinatura (dupla)
+        c.setLineWidth(1)
+        c.line(x, y_ass, x + larg_bloco, y_ass)
+        c.setLineWidth(0.5)
+        c.line(x, y_ass - 3, x + larg_bloco, y_ass - 3)
+
+        # Nome
+        c.setFont("Helvetica-Bold", 10)
+        c.drawCentredString(
+            x + larg_bloco / 2,
+            y_ass - 18,
+            nome if nome else " "
+        )
+
+        # Cargo
+        c.setFont("Helvetica", 9)
+        c.setFillColor(cinza)
+        c.drawCentredString(
+            x + larg_bloco / 2,
+            y_ass - 32,
+            titulo
+        )
+
+    # Local e data (rodapé elegante)
+    c.setFont("Helvetica", 9)
+    c.setFillColor(cinza)
+    c.drawString(
+        margem_x,
+        80,
+        f"Documento gerado em {datetime.now().strftime('%d/%m/%Y')}"
+    )
     rodape()
     c.save()

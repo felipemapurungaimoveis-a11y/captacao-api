@@ -145,10 +145,10 @@ def gerar_pdf(buffer, dados):
     def desenhar_secao(titulo, campos):
         nonlocal y
 
-        altura = 38
+        altura = 30
         for campo in campos:
             linhas = texto_quebrado(dados.get(campo, "—"), coluna_larg - 20)
-            altura += max(40, len(linhas) * 12 + 12)
+            altura += max(32, len(linhas) * 11 + 8)
 
         if y - altura < 100:
             nova_pagina()
@@ -179,7 +179,7 @@ def gerar_pdf(buffer, dados):
                 desenhar_badge(c, x + 8, y_cursor - 16,
                                "SIM" if str(valor).lower() == "sim" else "NÃO",
                                badge_cor)
-                h = 40
+                h = 28
             else:
                 if "PREÇO" in campo or "VALOR" in campo:
                     valor = formatar_valor(valor)
@@ -191,12 +191,12 @@ def gerar_pdf(buffer, dados):
                 h = abs(y_txt - y_cursor)
 
             if col:
-                y_cursor -= max(42, h)
+                y_cursor -= max(32, h)
                 col = 0
             else:
                 col = 1
 
-        y -= altura + 10
+        y -= altura + 4
 
     # =====================================================
     # SEÇÕES

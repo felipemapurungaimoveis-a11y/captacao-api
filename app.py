@@ -148,7 +148,7 @@ def gerar_pdf(buffer, dados):
         altura = 30
         for campo in campos:
             linhas = texto_quebrado(dados.get(campo, "—"), coluna_larg - 20)
-            altura += max(32, len(linhas) * 11 + 8)
+            altura += max(26, len(linhas) * 11 + 8)
 
         if y - altura < 100:
             nova_pagina()
@@ -191,7 +191,7 @@ def gerar_pdf(buffer, dados):
                 h = abs(y_txt - y_cursor)
 
             if col:
-                y_cursor -= max(32, h)
+                y_cursor -= max(32, h + 6)
                 col = 0
             else:
                 col = 1
